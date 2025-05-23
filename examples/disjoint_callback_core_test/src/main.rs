@@ -3,7 +3,7 @@ use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
 
 use std::thread;
-use crossbeam::channel::{unbounded, Sender, Receiver}; 
+use crossbeam::channel::{bounded, Sender, Receiver}; 
 use once_cell::sync::OnceCell;  
 use nix::sched::{sched_setaffinity, CpuSet}; 
 use nix::unistd::Pid; 
@@ -15,9 +15,10 @@ static DNS_SENDER: OnceCell<Sender<(DnsTransaction, ConnRecord)>> = OnceCell::ne
 fn init_processing_threads<T: std::marker::Send + 'static>(
     sender_cell: &OnceCell<Sender<T>>, 
     cores: Vec<usize>, 
-    thread_fn: fn(Receiver<T>)
+    thread_fn: fn(Receiver<T>),
+    channel_size: usize
 ){
-    let (sender, receiver) = unbounded::<T>(); 
+    let (sender, receiver) = bounded::<T>(channel_size); 
     sender_cell.set(sender).expect("Senders already initialized.");
  
     for core in cores {
@@ -90,12 +91,27 @@ fn main() {
     let tls_processing_cores = vec![1, 2]; 
     let dns_processing_cores = vec![3];
 
+    // setting size on a per-channel basis gives the user more flexibility, 
+    // if they know relative percentages for incoming traffic 
+    let tls_channel_size = 100000; 
+    let dns_channel_size = 100000; 
+
     // 1. check whether processing cores are disjoint (optional) 
     // 2. check whether processing cores and rx cores disjoint (required) 
     
     // launch threads for each callback
-    init_processing_threads::<(TlsHandshake, ConnRecord)>(&TLS_SENDER, tls_processing_cores, tls_processing_thread);
-    init_processing_threads::<(DnsTransaction, ConnRecord)>(&DNS_SENDER, dns_processing_cores, dns_processing_thread); 
+    init_processing_threads::<(TlsHandshake, ConnRecord)>(
+        &TLS_SENDER, 
+        tls_processing_cores, 
+        tls_processing_thread,
+        tls_channel_size 
+    );
+    init_processing_threads::<(DnsTransaction, ConnRecord)>(
+        &DNS_SENDER, 
+        dns_processing_cores, 
+        dns_processing_thread,
+        dns_channel_size
+    ); 
 
     let config = default_config();
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();

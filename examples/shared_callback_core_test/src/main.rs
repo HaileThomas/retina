@@ -3,7 +3,7 @@ use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
 
 use std::thread;
-use crossbeam::channel::{unbounded, select, Sender, Receiver}; 
+use crossbeam::channel::{bounded, select, Sender, Receiver}; 
 use once_cell::sync::OnceCell;  
 use nix::sched::{sched_setaffinity, CpuSet}; 
 use nix::unistd::Pid; 
@@ -12,9 +12,9 @@ static TLS_SENDER: OnceCell<Sender<(TlsHandshake, ConnRecord)>> = OnceCell::new(
 static DNS_SENDER: OnceCell<Sender<(DnsTransaction, ConnRecord)>> = OnceCell::new(); 
 
 // spawns threads pinned to specified cores
-fn init_processing_threads(cores: Vec<usize>){
-    let (tls_sender, tls_receiver) = unbounded::<(TlsHandshake, ConnRecord)>();
-    let (dns_sender, dns_receiver) = unbounded::<(DnsTransaction, ConnRecord)>(); 
+fn init_processing_threads(cores: Vec<usize>, channel_size: usize){
+    let (tls_sender, tls_receiver) = bounded::<(TlsHandshake, ConnRecord)>(channel_size);
+    let (dns_sender, dns_receiver) = bounded::<(DnsTransaction, ConnRecord)>(channel_size); 
 
     TLS_SENDER.set(tls_sender).expect("TLS Sender already initialized.");
     DNS_SENDER.set(dns_sender).expect("DNS Sender already initialized."); 
@@ -101,9 +101,10 @@ fn dns_processing_thread(dns: &DnsTransaction, conn_record: &ConnRecord) {
 fn main() {
     // user-provided through macro attribute per callback     
     let processing_cores = vec![1, 2, 3]; 
+    let channel_size = 100000; 
 
     // check whether processing cores and rx cores disjoint (required) 
-    init_processing_threads(processing_cores);  
+    init_processing_threads(processing_cores, channel_size);  
 
     let config = default_config();
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();
