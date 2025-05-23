@@ -66,7 +66,7 @@ fn process_subscriptions(
 #[filter("tls")]
 fn tls_cb(tls: &TlsHandshake, conn_record: &ConnRecord) {
     if let Some(sender) = TLS_SENDER.get() {         
-        if let Err(e) = sender.send((tls.clone(), conn_record.clone())) {
+        if let Err(e) = sender.try_send((tls.clone(), conn_record.clone())) {
             eprintln!("Failed to send TLS data through channel: {}", e); 
         }
     } else {
@@ -83,7 +83,7 @@ fn tls_processing_thread(tls: &TlsHandshake, conn_record: &ConnRecord) {
 #[filter("dns")]
 fn dns_cb(dns: &DnsTransaction, conn_record: &ConnRecord) {
     if let Some(sender) = DNS_SENDER.get() {
-        if let Err(e) = sender.send((dns.clone(), conn_record.clone())) {
+        if let Err(e) = sender.try_send((dns.clone(), conn_record.clone())) {
             eprintln!("Failed to send DNS data through chhanel: {}", e); 
         }
     } else {
