@@ -1,4 +1,4 @@
-use retina_core::{config::default_config, Runtime, CoreId};
+use retina_core::{config::default_config, config::load_config, Runtime, CoreId};
 use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
 use std::{thread, collections::HashMap};
@@ -9,19 +9,19 @@ use nix::unistd::Pid;
 
 type TlsData = (TlsHandshake, ConnRecord);
 type DnsData = (DnsTransaction, ConnRecord);
- 
+
 static TLS_CHANNELS: OnceLock<HashMap<CoreId, (Sender<TlsData>, Receiver<TlsData>)>> = OnceLock::new();
 static DNS_CHANNELS: OnceLock<HashMap<CoreId, (Sender<DnsData>, Receiver<DnsData>)>> = OnceLock::new();
 
-fn init_processing_threads(processing_cores: Vec<usize>, rx_cores: Vec<usize>, channel_size: usize){
+fn init_processing_threads(processing_cores: Vec<usize>, rx_cores: Vec<CoreId>, channel_size: usize){
     let mut tls_channels_map = HashMap::new();
     let mut dns_channels_map = HashMap::new();
     
     for core in &rx_cores {
         let (tls_sender, tls_receiver) = bounded::<TlsData>(channel_size);
         let (dns_sender, dns_receiver) = bounded::<DnsData>(channel_size);
-        tls_channels_map.insert(CoreId(*core as u32), (tls_sender, tls_receiver));
-        dns_channels_map.insert(CoreId(*core as u32), (dns_sender, dns_receiver));
+        tls_channels_map.insert(*core, (tls_sender, tls_receiver));
+        dns_channels_map.insert(*core, (dns_sender, dns_receiver));
     }
     
     TLS_CHANNELS.set(tls_channels_map).expect("TLS Channels already initialized.");
@@ -122,7 +122,11 @@ fn dns_processing_thread(dns: &DnsTransaction, conn_record: &ConnRecord) {
 #[retina_main(2)]
 fn main() {
     let processing_cores = vec![1, 2, 3];
-    let rx_cores = vec![0];
+     
+    let config = load_config("./configs/offline.toml");
+    let rx_cores = config.get_all_rx_core_ids();
+    println!("available rx_cores: {:?}", rx_cores);
+
     let channel_size = 100000;
     
     init_processing_threads(processing_cores, rx_cores, channel_size);

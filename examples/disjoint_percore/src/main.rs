@@ -1,4 +1,4 @@
-use retina_core::{config::default_config, Runtime, CoreId};
+use retina_core::{config::default_config, config::load_config, Runtime, CoreId};
 use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
 use crossbeam::channel::{bounded, Sender, Receiver, Select};
@@ -15,7 +15,7 @@ static DNS_CHANNELS: OnceLock<HashMap<CoreId, (Sender<DnsData>, Receiver<DnsData
 fn spawn_processing_threads<T: std::marker::Send + 'static>(
     channel_cell: &OnceLock<HashMap<CoreId, (Sender<T>, Receiver<T>)>>,
     processing_cores: Vec<usize>,
-    rx_cores: Vec<usize>,
+    rx_cores: Vec<CoreId>,
     thread_fn: fn(&Vec<Receiver<T>>),
     channel_size: usize,
 ) {
@@ -23,7 +23,7 @@ fn spawn_processing_threads<T: std::marker::Send + 'static>(
 
     for core in &rx_cores {
         let (sender, receiver) = bounded(channel_size);
-        channels_map.insert(CoreId(*core as u32), (sender, receiver));
+        channels_map.insert(*core, (sender, receiver));
     }
 
     channel_cell.set(channels_map).expect("Channels already set");
@@ -126,6 +126,7 @@ fn dns_processing_thread(receivers: &Vec<Receiver<DnsData>>) {
                     conn_record
                 );
             }
+
             Err(_) => {
                 eprintln!("Receiver {} disconnected, exiting thread.", index);
                 break;
@@ -137,9 +138,11 @@ fn dns_processing_thread(receivers: &Vec<Receiver<DnsData>>) {
 #[retina_main(2)]
 fn main() {
     let tls_processing_cores = vec![1, 2];
-    let dns_processing_cores = vec![3];
- 
-    let rx_cores = vec![0]; // change to .get_all_rx_core_ids()? 
+    let dns_processing_cores = vec![3]; 
+
+    let config = load_config("./configs/offline.toml");
+    let rx_cores = config.get_all_rx_core_ids();
+    println!("available rx_cores: {:?}", rx_cores);  
 
     let tls_channel_size = 100_000;
     let dns_channel_size = 100_000;

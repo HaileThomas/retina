@@ -8,8 +8,11 @@ use once_cell::sync::OnceCell;
 use nix::sched::{sched_setaffinity, CpuSet}; 
 use nix::unistd::Pid; 
  
-static TLS_SENDER: OnceCell<Sender<(TlsHandshake, ConnRecord)>> = OnceCell::new(); 
-static DNS_SENDER: OnceCell<Sender<(DnsTransaction, ConnRecord)>> = OnceCell::new(); 
+type TlsData = (TlsHandshake, ConnRecord);
+type DnsData = (DnsTransaction, ConnRecord);
+
+static TLS_SENDER: OnceCell<Sender<TlsData>> = OnceCell::new(); 
+static DNS_SENDER: OnceCell<Sender<DnsData>> = OnceCell::new(); 
 
 // spawns threads pinned to specified cores
 fn init_processing_threads(cores: Vec<usize>, channel_size: usize){

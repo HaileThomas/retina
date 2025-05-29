@@ -7,9 +7,12 @@ use crossbeam::channel::{bounded, Sender, Receiver};
 use once_cell::sync::OnceCell;  
 use nix::sched::{sched_setaffinity, CpuSet}; 
 use nix::unistd::Pid; 
- 
-static TLS_SENDER: OnceCell<Sender<(TlsHandshake, ConnRecord)>> = OnceCell::new(); 
-static DNS_SENDER: OnceCell<Sender<(DnsTransaction, ConnRecord)>> = OnceCell::new(); 
+
+type TlsData = (TlsHandshake, ConnRecord);
+type DnsData = (DnsTransaction, ConnRecord);
+
+static TLS_SENDER: OnceCell<Sender<TlsData>> = OnceCell::new(); 
+static DNS_SENDER: OnceCell<Sender<DnsData>> = OnceCell::new(); 
 
 // spawns threads (dedicated to handling particular callback) pinned to specific cores
 fn init_processing_threads<T: std::marker::Send + 'static>(
@@ -98,13 +101,13 @@ fn main() {
     // 2. check whether processing cores and rx cores disjoint (required) 
     
     // launch threads for each callback
-    init_processing_threads::<(TlsHandshake, ConnRecord)>(
+    init_processing_threads::<TlsData>(
         &TLS_SENDER, 
         tls_processing_cores, 
         tls_processing_thread,
         tls_channel_size 
     );
-    init_processing_threads::<(DnsTransaction, ConnRecord)>(
+    init_processing_threads::<DnsData>(
         &DNS_SENDER, 
         dns_processing_cores, 
         dns_processing_thread,
