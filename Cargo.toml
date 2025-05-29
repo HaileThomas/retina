@@ -13,8 +13,10 @@ members = [
     "examples/log_ssh",
     "examples/streaming",
     "examples/my_simple",
-    "examples/disjoint_callback_core_test",
-    "examples/shared_callback_core_test", 
+    "examples/disjoint_percore",
+    "examples/disjoint_single", 
+    "examples/shared_percore",  
+    "examples/shared_single" 
 ]
 resolver = "2"
 

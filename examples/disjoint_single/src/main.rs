@@ -16,7 +16,7 @@ fn init_processing_threads<T: std::marker::Send + 'static>(
     sender_cell: &OnceCell<Sender<T>>, 
     cores: Vec<usize>, 
     thread_fn: fn(Receiver<T>),
-    channel_size: usize
+    channel_size: usize 
 ){
     let (sender, receiver) = bounded::<T>(channel_size); 
     sender_cell.set(sender).expect("Senders already initialized.");
@@ -44,7 +44,7 @@ fn init_processing_threads<T: std::marker::Send + 'static>(
 #[filter("tls")]
 fn tls_cb(tls: &TlsHandshake, conn_record: &ConnRecord) {
     if let Some(sender) = TLS_SENDER.get() {         
-        if let Err(e) = sender.try_send((tls.clone(), conn_record.clone())) {
+        if let Err(e) = sender.send((tls.clone(), conn_record.clone())) {
             eprintln!("Failed to send TLS data through channel: {}", e); 
         }
     } else {
@@ -65,7 +65,7 @@ fn tls_processing_thread(receiver: Receiver<(TlsHandshake, ConnRecord)>) {
 #[filter("dns")]
 fn dns_cb(dns: &DnsTransaction, conn_record: &ConnRecord) {
     if let Some(sender) = DNS_SENDER.get() {
-        if let Err(e) = sender.try_send((dns.clone(), conn_record.clone())) {
+        if let Err(e) = sender.send((dns.clone(), conn_record.clone())) {
             eprintln!("Failed to send DNS data through chhanel: {}", e); 
         }
     } else {
@@ -91,10 +91,8 @@ fn main() {
     let tls_processing_cores = vec![1, 2]; 
     let dns_processing_cores = vec![3];
 
-    // setting size on a per-channel basis gives the user more flexibility, 
-    // if they know relative percentages for incoming traffic 
-    let tls_channel_size = 100000; 
-    let dns_channel_size = 100000; 
+    let tls_channel_size = 100_000;
+    let dns_channel_size = 100_000;
 
     // 1. check whether processing cores are disjoint (optional) 
     // 2. check whether processing cores and rx cores disjoint (required) 
@@ -110,10 +108,12 @@ fn main() {
         &DNS_SENDER, 
         dns_processing_cores, 
         dns_processing_thread,
-        dns_channel_size
+        dns_channel_size 
     ); 
 
     let config = default_config();
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();
     runtime.run();
 }
+
+
