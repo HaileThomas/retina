@@ -2,6 +2,11 @@
 members = [
     "core",
     "datatypes",
+    "benchmark/tests/disjoint_single",
+    "benchmark/tests/disjoint_percore", 
+    "benchmark/tests/shared_single",
+    "benchmark/tests/shared_percore",
+    "benchmark/tests/basic",     
     "examples/websites",
     "examples/websites-prometheus",
     "examples/port_count",
@@ -12,6 +17,12 @@ members = [
     "examples/basic_file",
     "examples/log_ssh",
     "examples/streaming",
+    "examples/my_simple",
+    "examples/disjoint_percore",
+    "examples/disjoint_single", 
+    "examples/shared_percore",  
+    "examples/shared_single" 
+    
 ]
 resolver = "2"
 
