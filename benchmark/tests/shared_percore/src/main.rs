@@ -136,7 +136,7 @@ fn main() {
     let benchmark_manager = Arc::new(BenchmarkManager::new(queue_size));
     BENCHMARK_GLOBAL.set(benchmark_manager).expect("Already initialized");
     
-    let config = load_config("./configs/offline.toml");
+    let config = load_config("./configs/online.toml");
     let rx_cores = config.get_all_rx_core_ids();
     
     init_processing_threads(Vec::from([1, 2, 3]), rx_cores, queue_size);
