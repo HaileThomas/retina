@@ -1,4 +1,4 @@
-use retina_core::{config::default_config, Runtime};
+use retina_core::{config::load_config, Runtime};
 use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
 use benchmark::BenchmarkManager;
@@ -29,10 +29,10 @@ fn dns_cb(_dns: &DnsTransaction, _conn_record: &ConnRecord) {
 
 #[retina_main(2)]
 fn main() {
-    let benchmark_manager = Arc::new(BenchmarkManager::new());
+    let benchmark_manager = Arc::new(BenchmarkManager::new(0 as u64));
     BENCHMARK_GLOBAL.set(benchmark_manager).expect("Already initialized");
     
-    let config = default_config();
+    let config = load_config("./configs/online.toml");
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();
     runtime.run();
     

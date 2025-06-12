@@ -1,8 +1,10 @@
+GLOBAL_TIMEOUT=$((20 + 9))
+
 benchmark_stats() {
   local target="$1"
   shift
 
-  sudo env LD_LIBRARY_PATH=$LD_LIBRARY_PATH RUST_LOG=debug \
+  sudo timeout "$GLOBAL_TIMEOUT" env LD_LIBRARY_PATH=$LD_LIBRARY_PATH RUST_LOG=debug \
     perf stat -e stalled-cycles-frontend,stalled-cycles-backend,cache-misses,major-faults \
     ./target/debug/"$target" "$@"
 }
@@ -29,7 +31,7 @@ benchmark_profile_callbacks() {
   
   echo “Running perf record on target: $target”
   
-  sudo env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" RUST_LOG=error \
+  sudo timeout "$GLOBAL_TIMEOUT" env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" RUST_LOG=error \
       perf record \
       --call-graph lbr \
       -F 10000 \
@@ -70,7 +72,7 @@ benchmark_profile_cores() {
       -o "$output_dir/processing_core${processing_core}.perf.data" & processing_pid=$!
   sleep 1  # allow perf to initialize
   
-  sudo env LD_LIBRARY_PATH=$LD_LIBRARY_PATH RUST_LOG=debug ./target/debug/"$target" "$@"
+  sudo timeout "$GLOBAL_TIMEOUT" env LD_LIBRARY_PATH=$LD_LIBRARY_PATH RUST_LOG=debug ./target/debug/"$target" "$@"
   sudo kill -INT "$callback_pid" "$processing_pid" 2>/dev/null || true
   wait "$callback_pid" "$processing_pid" 2>/dev/null || true
   
@@ -85,5 +87,3 @@ benchmark_profile_cores() {
   sudo chown -R "$USER:$USER" "$output_dir"
   echo "Reports: callback_core${callback_core}_report.txt, processing_core${processing_core}_report.txt"
 }
-
-

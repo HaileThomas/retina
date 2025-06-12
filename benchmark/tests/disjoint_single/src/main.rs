@@ -3,7 +3,7 @@ use crossbeam::channel::{bounded, Receiver, Sender};
 use nix::sched::{sched_setaffinity, CpuSet};
 use nix::unistd::Pid;
 use once_cell::sync::OnceCell;
-use retina_core::{config::default_config, Runtime};
+use retina_core::{config::load_config, Runtime};
 use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
 use std::time::Instant;
@@ -120,8 +120,7 @@ fn main() {
     init_processing_threads::<TimedTlsData>(&TLS_SENDER, Vec::from([1, 2]), tls_processing_thread, queue_size);
     init_processing_threads::<TimedDnsData>(&DNS_SENDER, Vec::from([3]), dns_processing_thread, queue_size);
     
-    
-    let config = default_config();
+    let config = load_config("./configs/online.toml");
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();
     runtime.run();
     

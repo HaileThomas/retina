@@ -1,4 +1,4 @@
-use retina_core::{config::default_config, config::load_config, Runtime, CoreId};
+use retina_core::{config::load_config, Runtime, CoreId};
 use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
 use crossbeam::channel::{bounded, Sender, Receiver, Select};
@@ -167,7 +167,6 @@ fn main() {
     spawn_processing_threads::<TimedDnsData>(
         &DNS_CHANNELS, Vec::from([3]), rx_cores.clone(), dns_processing_thread, queue_size); 
 
-    let config = default_config();
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();
     runtime.run();
 

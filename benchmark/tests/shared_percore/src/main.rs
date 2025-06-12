@@ -1,4 +1,4 @@
-use retina_core::{config::default_config, config::load_config, Runtime, CoreId};
+use retina_core::{config::load_config, Runtime, CoreId};
 use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
 use std::{thread, collections::HashMap, sync::Arc, time::Instant};
@@ -140,8 +140,7 @@ fn main() {
     let rx_cores = config.get_all_rx_core_ids();
     
     init_processing_threads(Vec::from([1, 2, 3]), rx_cores, queue_size);
-    
-    let config = default_config();
+
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();
     runtime.run();
     
