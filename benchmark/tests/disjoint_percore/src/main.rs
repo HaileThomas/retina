@@ -6,10 +6,17 @@ use nix::sched::{sched_setaffinity, CpuSet};
 use nix::unistd::Pid;
 use std::{thread, sync::OnceLock, collections::HashMap, time::Instant};
 use std::sync::Arc;
+use clap::Parser; 
 use benchmark::BenchmarkManager; 
 
 type TimedTlsData = (Instant, TlsHandshake, ConnRecord);
 type TimedDnsData = (Instant, DnsTransaction, ConnRecord);
+
+#[derive(Parser, Debug)]
+struct Args {
+    #[clap(long, default_value = "1000")] 
+    queue_size: u64,
+}
 
 static TLS_CHANNELS: OnceLock<HashMap<CoreId, (Sender<TimedTlsData>, Receiver<TimedTlsData>)>> = OnceLock::new();
 static DNS_CHANNELS: OnceLock<HashMap<CoreId, (Sender<TimedDnsData>, Receiver<TimedDnsData>)>> = OnceLock::new();
@@ -20,12 +27,12 @@ fn spawn_processing_threads<T: std::marker::Send + 'static>(
     processing_cores: Vec<usize>,
     rx_cores: Vec<CoreId>,
     thread_fn: fn(&Vec<Receiver<T>>),
-    channel_size: usize,
+    channel_size: u64,
 ) {
     let mut channels_map = HashMap::new();
 
     for core in &rx_cores {
-        let (sender, receiver) = bounded(channel_size);
+        let (sender, receiver) = bounded(channel_size as usize);
         channels_map.insert(*core, (sender, receiver));
     }
 
@@ -146,14 +153,19 @@ fn dns_processing_thread(receivers: &Vec<Receiver<TimedDnsData>>) {
 
 #[retina_main(2)]
 fn main() {
-    let benchmark_manager = Arc::new(BenchmarkManager::new()); 
+    let args = Args::parse(); 
+    let queue_size: u64 = args.queue_size; 
+
+    let benchmark_manager = Arc::new(BenchmarkManager::new(queue_size)); 
     BENCHMARK_GLOBAL.set(benchmark_manager).expect("Already initialized"); 
 
     let config = load_config("./configs/offline.toml");
     let rx_cores = config.get_all_rx_core_ids();  
 
-    spawn_processing_threads::<TimedTlsData>(&TLS_CHANNELS, Vec::from([1, 2]), rx_cores.clone(), tls_processing_thread, 100000);
-    spawn_processing_threads::<TimedDnsData>(&DNS_CHANNELS, Vec::from([3]), rx_cores.clone(), dns_processing_thread, 100000); 
+    spawn_processing_threads::<TimedTlsData>(
+        &TLS_CHANNELS, Vec::from([1, 2]), rx_cores.clone(), tls_processing_thread, queue_size);
+    spawn_processing_threads::<TimedDnsData>(
+        &DNS_CHANNELS, Vec::from([3]), rx_cores.clone(), dns_processing_thread, queue_size); 
 
     let config = default_config();
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();

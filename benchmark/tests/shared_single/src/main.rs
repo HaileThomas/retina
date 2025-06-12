@@ -6,18 +6,25 @@ use crossbeam::channel::{bounded, select, Sender, Receiver};
 use once_cell::sync::OnceCell;
 use nix::sched::{sched_setaffinity, CpuSet};
 use nix::unistd::Pid;
+use clap::Parser; 
 use benchmark::BenchmarkManager;
 
 type TimedTlsData = (Instant, TlsHandshake, ConnRecord);
 type TimedDnsData = (Instant, DnsTransaction, ConnRecord);
 
+#[derive(Parser, Debug)]
+struct Args {
+    #[clap(long, default_value = "1000")]
+    queue_size: u64,
+}
+
 static TLS_SENDER: OnceCell<Sender<TimedTlsData>> = OnceCell::new();
 static DNS_SENDER: OnceCell<Sender<TimedDnsData>> = OnceCell::new();
 static BENCHMARK_GLOBAL: OnceCell<Arc<BenchmarkManager>> = OnceCell::new();
 
-fn init_processing_threads(cores: Vec<usize>, channel_size: usize) {
-    let (tls_sender, tls_receiver) = bounded::<TimedTlsData>(channel_size);
-    let (dns_sender, dns_receiver) = bounded::<TimedDnsData>(channel_size);
+fn init_processing_threads(cores: Vec<usize>, channel_size: u64) {
+    let (tls_sender, tls_receiver) = bounded::<TimedTlsData>(channel_size as usize);
+    let (dns_sender, dns_receiver) = bounded::<TimedDnsData>(channel_size as usize);
 
     TLS_SENDER.set(tls_sender).expect("TLS Sender already initialized.");
     DNS_SENDER.set(dns_sender).expect("DNS Sender already initialized.");
@@ -98,10 +105,13 @@ fn dns_cb(dns: &DnsTransaction, conn_record: &ConnRecord) {
 
 #[retina_main(2)]
 fn main() {
-    let benchmark_manager = Arc::new(BenchmarkManager::new());
+    let args = Args::parse(); 
+    let queue_size: u64 = args.queue_size; 
+
+    let benchmark_manager = Arc::new(BenchmarkManager::new(queue_size));
     BENCHMARK_GLOBAL.set(benchmark_manager).expect("Already initialized");
 
-    init_processing_threads(Vec::from([1, 2, 3]), 100000);
+    init_processing_threads(Vec::from([1, 2, 3]), queue_size);
 
     let config = default_config();
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();

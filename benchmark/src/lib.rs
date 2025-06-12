@@ -6,6 +6,7 @@ pub struct Metrics {
     pub subscriptions_processed: u64,
     pub subscriptions_dropped: u64,
     pub latency_ms: f64,
+    pub queue_size: u64, 
 }
 
 #[derive(Debug)]
@@ -14,9 +15,12 @@ pub struct BenchmarkManager {
 }
 
 impl BenchmarkManager {
-    pub fn new() -> Self {
+    pub fn new(queue_size: u64) -> Self {
+        let mut metrics = Metrics::default();  
+        metrics.queue_size = queue_size; 
+
         Self {
-            results: Arc::new(Mutex::new(Metrics::default())),
+            results: Arc::new(Mutex::new(metrics)),
         }
     }
 
@@ -41,7 +45,7 @@ impl BenchmarkManager {
 
     pub fn print_results(&self) {
         let metrics = self.results.lock().unwrap();
-        
+        println!("Queue Size: {}", metrics.queue_size); 
         println!("Subscriptions Processed: {}", metrics.subscriptions_processed);
         println!("Subscriptions Dropped: {}", metrics.subscriptions_dropped);
         println!("Subscription Processing Latency: {:.2} ms", metrics.latency_ms);
