@@ -8,9 +8,16 @@ use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
 use std::time::Instant;
 use std::{sync::Arc, thread};
+use clap::Parser; 
 
 type TimedTlsData = (Instant, TlsHandshake, ConnRecord);
 type TimedDnsData = (Instant, DnsTransaction, ConnRecord);
+
+#[derive(Parser, Debug)]
+struct Args {
+    #[clap(long, default_value = "1000")]
+    queue_size: u64,
+}
 
 static TLS_SENDER: OnceCell<Sender<TimedTlsData>> = OnceCell::new();
 static DNS_SENDER: OnceCell<Sender<TimedDnsData>> = OnceCell::new();
@@ -21,9 +28,9 @@ fn init_processing_threads<T: std::marker::Send + 'static>(
     sender_cell: &OnceCell<Sender<T>>,
     cores: Vec<usize>,
     thread_fn: fn(Receiver<T>),
-    channel_size: usize,
+    channel_size: u64,
 ) {
-    let (sender, receiver) = bounded::<T>(channel_size);
+    let (sender, receiver) = bounded::<T>(channel_size as usize);
     sender_cell
         .set(sender)
         .expect("Senders already initialized.");
@@ -101,14 +108,18 @@ fn dns_processing_thread(receiver: Receiver<TimedDnsData>) {
 
 #[retina_main(2)]
 fn main() {
-    let benchmark_manager = Arc::new(BenchmarkManager::new());
+    let args = Args::parse(); 
+    let queue_size = args.queue_size; 
+
+    let benchmark_manager = Arc::new(BenchmarkManager::new(queue_size));
     
     BENCHMARK_GLOBAL
         .set(benchmark_manager)
         .expect("Already initialized");
     
-    init_processing_threads::<TimedTlsData>(&TLS_SENDER, Vec::from([1, 2]), tls_processing_thread, 100000);
-    init_processing_threads::<TimedDnsData>(&DNS_SENDER, Vec::from([3]), dns_processing_thread, 100000);
+    init_processing_threads::<TimedTlsData>(&TLS_SENDER, Vec::from([1, 2]), tls_processing_thread, queue_size);
+    init_processing_threads::<TimedDnsData>(&DNS_SENDER, Vec::from([3]), dns_processing_thread, queue_size);
+    
     
     let config = default_config();
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();

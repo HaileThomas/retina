@@ -6,22 +6,29 @@ use crossbeam::channel::{bounded, select, Sender, Receiver};
 use std::sync::OnceLock;
 use nix::sched::{sched_setaffinity, CpuSet};
 use nix::unistd::Pid;
+use clap::Parser; 
 use benchmark::BenchmarkManager;
 
 type TimedTlsData = (Instant, TlsHandshake, ConnRecord);
 type TimedDnsData = (Instant, DnsTransaction, ConnRecord);
 
+#[derive(Parser, Debug)]
+struct Args {
+    #[clap(long, default_value = "1000")]
+    queue_size: u64,
+}
+
 static TLS_CHANNELS: OnceLock<HashMap<CoreId, (Sender<TimedTlsData>, Receiver<TimedTlsData>)>> = OnceLock::new();
 static DNS_CHANNELS: OnceLock<HashMap<CoreId, (Sender<TimedDnsData>, Receiver<TimedDnsData>)>> = OnceLock::new();
 static BENCHMARK_GLOBAL: OnceLock<Arc<BenchmarkManager>> = OnceLock::new();
 
-fn init_processing_threads(processing_cores: Vec<usize>, rx_cores: Vec<CoreId>, channel_size: usize) {
+fn init_processing_threads(processing_cores: Vec<usize>, rx_cores: Vec<CoreId>, channel_size: u64) {
     let mut tls_channels_map = HashMap::new();
     let mut dns_channels_map = HashMap::new();
     
     for core in &rx_cores {
-        let (tls_sender, tls_receiver) = bounded::<TimedTlsData>(channel_size);
-        let (dns_sender, dns_receiver) = bounded::<TimedDnsData>(channel_size);
+        let (tls_sender, tls_receiver) = bounded::<TimedTlsData>(channel_size as usize);
+        let (dns_sender, dns_receiver) = bounded::<TimedDnsData>(channel_size as usize);
         tls_channels_map.insert(*core, (tls_sender, tls_receiver));
         dns_channels_map.insert(*core, (dns_sender, dns_receiver));
     }
@@ -123,13 +130,16 @@ fn dns_cb(dns: &DnsTransaction, conn_record: &ConnRecord, rx_core: &CoreId) {
 
 #[retina_main(2)]
 fn main() {
-    let benchmark_manager = Arc::new(BenchmarkManager::new());
+    let args = Args::parse(); 
+    let queue_size: u64 = args.queue_size; 
+
+    let benchmark_manager = Arc::new(BenchmarkManager::new(queue_size));
     BENCHMARK_GLOBAL.set(benchmark_manager).expect("Already initialized");
     
     let config = load_config("./configs/offline.toml");
     let rx_cores = config.get_all_rx_core_ids();
     
-    init_processing_threads(Vec::from([1, 2, 3]), rx_cores, 100000);
+    init_processing_threads(Vec::from([1, 2, 3]), rx_cores, queue_size);
     
     let config = default_config();
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();
@@ -139,5 +149,3 @@ fn main() {
         benchmark_manager.print_results();
     }
 }
-
-
