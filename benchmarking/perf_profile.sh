@@ -16,7 +16,7 @@ perf_record_and_report() {
             -F 10000 \
             -g \
             -o "$output_file" \
-            env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" RUST_LOG=error "$BINARY_PATH" 2>&1; then
+            env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" RUST_LOG=error "$BINARY_PATH" --config './configs/online.toml' 2>&1; then
             print_error "Perf record failed on filtered cores"
             return 1
         fi
@@ -28,7 +28,7 @@ perf_record_and_report() {
             -F 10000 \
             -g \
             -o "$output_file" \
-            env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" RUST_LOG=error "$BINARY_PATH" 2>&1; then
+            env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" RUST_LOG=error "$BINARY_PATH" --config './configs/online.toml' 2>&1; then
             print_error "Perf record failed"
             return 1
         fi

@@ -11,7 +11,7 @@ run_perf_stat() {
     sudo perf stat \
         -e "$perf_events" \
         -o "$output_file" \
-        env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" RUST_LOG=error "$BINARY_PATH" 2>&1 || {
+        env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" RUST_LOG=error "$BINARY_PATH" --config './configs/online.toml' 2>&1 || {
             print_error "perf stat failed"
             return 1
         }
