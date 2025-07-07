@@ -43,7 +43,7 @@ fn main() {
 
     let tls_dispatcher = Arc::new(ChannelDispatcher::new(ChannelMode::Shared, 1024));
 
-    let dns_dispatcher = Arc::new(ChannelDispatcher::new(ChannelMode::Shared, 512));
+    let dns_dispatcher = Arc::new(ChannelDispatcher::new(ChannelMode::Shared, 1024));
 
     TLS_DISPATCHER
         .set(tls_dispatcher.clone())
@@ -55,7 +55,7 @@ fn main() {
         .unwrap();
 
     SharedWorkerThreadSpawner::new()
-        .set_cores(vec![CoreId(1), CoreId(2), CoreId(3)])
+        .set_cores(vec![CoreId(19), CoreId(20), CoreId(21), CoreId(22)])
         .add_dispatcher(tls_dispatcher.clone(), |event: Event| {
             if let Event::Tls((_tls, _conn_record)) = event {
                 // add handler here 

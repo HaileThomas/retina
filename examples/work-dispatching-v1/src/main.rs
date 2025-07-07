@@ -55,7 +55,7 @@ fn main() {
 
     let dns_dispatcher = Arc::new(ChannelDispatcher::new(
         ChannelMode::PerCore(rx_cores.clone()),
-        512,
+        1024,
     ));
 
     TLS_DISPATCHER
@@ -68,7 +68,7 @@ fn main() {
         .unwrap();
 
     DedicatedWorkerThreadSpawner::new()
-        .set_cores(vec![CoreId(1), CoreId(2)])
+        .set_cores(vec![CoreId(19), CoreId(20)])
         .set_dispatcher(tls_dispatcher.clone())
         .set(|event: Event| {
             if let Event::Tls((_tls, _conn_record)) = event {
@@ -78,7 +78,7 @@ fn main() {
         .run();
 
     DedicatedWorkerThreadSpawner::new()
-        .set_cores(vec![CoreId(3)])
+        .set_cores(vec![CoreId(21), CoreId(22)])
         .set_dispatcher(dns_dispatcher.clone())
         .set(|event: Event| {
             if let Event::Dns((_dns, _conn_record)) = event {
