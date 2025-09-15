@@ -1,13 +1,15 @@
 use clap::{ArgAction::SetTrue, Parser};
 use retina_core::multicore::{ChannelDispatcher, ChannelMode, DedicatedWorkerThreadSpawner};
-use retina_core::{config::load_config, CoreId, Runtime};
+use retina_core::{config::load_config, CoreId, Runtime, rte_rdtsc};
 use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 static TLS_DISPATCHER: OnceLock<Arc<ChannelDispatcher<Event>>> = OnceLock::new();
 static DNS_DISPATCHER: OnceLock<Arc<ChannelDispatcher<Event>>> = OnceLock::new();
+static SPIN_CYCLES: AtomicU64 = AtomicU64::new(100000);
 
 #[derive(Copy, Clone, Debug, clap::ValueEnum)]
 enum ChannelModeArg {
@@ -62,6 +64,9 @@ struct Args {
 
     #[clap(long, value_name = "BOOLEAN", action = SetTrue)]
     show_args: bool,
+
+    #[clap(long, value_name = "CYCLES", default_value = "100000")]
+    spin: u64,
 }
 
 #[derive(Clone)]
@@ -87,6 +92,20 @@ fn dns_cb(dns: &DnsTransaction, conn_record: &ConnRecord, rx_core: &CoreId) {
             Event::Dns((dns.clone(), conn_record.clone())),
             Some(rx_core),
         );
+    }
+}
+
+#[inline]
+fn spin(cycles: u64) {
+    if cycles == 0 {
+        return;
+    }
+    let start = unsafe { rte_rdtsc() };
+    loop {
+        let now = unsafe { rte_rdtsc() };
+        if now - start > cycles {
+            break;
+        }
     }
 }
 
@@ -136,13 +155,18 @@ fn main() {
         .map(|&core| CoreId(core))
         .collect();
 
+    SPIN_CYCLES.store(args.spin, Ordering::Relaxed);
+
     let tls_handler = DedicatedWorkerThreadSpawner::new()
         .set_cores(tls_core_ids)
         .set_batch_size(args.tls_batch_size)
         .set_dispatcher(tls_dispatcher.clone())
         .set_handler(
             |event: Event| {
-                if let Event::Tls((_tls, _conn_record)) = event {}
+                if let Event::Tls((_tls, _conn_record)) = event {
+                    let cycles = SPIN_CYCLES.load(Ordering::Relaxed);
+                    spin(cycles); 
+                }   
             },
         )
         .run();
@@ -153,7 +177,10 @@ fn main() {
         .set_dispatcher(dns_dispatcher.clone())
         .set_handler(
             |event: Event| {
-                if let Event::Dns((_dns, _conn_record)) = event {}
+                if let Event::Dns((_dns, _conn_record)) = event {
+                    let cycles = SPIN_CYCLES.load(Ordering::Relaxed);
+                    spin(cycles); 
+                }
             },
         )
         .run();
