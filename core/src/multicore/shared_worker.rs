@@ -1,7 +1,14 @@
 use super::{pin_thread_to_core, ChannelDispatcher, SubscriptionStats};
 use crate::CoreId;
 use crossbeam::channel::{Receiver, Select, TryRecvError};
-use std::sync::{atomic::Ordering, Arc, Barrier};
+use serde::Serialize;
+use std::fs::File;
+use std::io::{Error, ErrorKind, Result, Write};
+use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Barrier,
+};
 use std::thread::{self, sleep, JoinHandle};
 use std::time::Duration;
 
@@ -25,6 +32,7 @@ where
 {
     handles: Vec<JoinHandle<()>>,
     dispatchers: Vec<Arc<ChannelDispatcher<T>>>,
+    shutdown_signal: Arc<AtomicBool>,
 }
 
 /// Handle for initializing a group of shared worker threads.
@@ -92,6 +100,7 @@ where
             .expect("Cores must be set via set_cores()");
 
         let num_threads = worker_cores.len();
+        let shutdown_signal = Arc::new(AtomicBool::new(false));
 
         // Barrier to ensure all threads are spawned before returning
         let startup_barrier = Arc::new(Barrier::new(num_threads + 1)); // +1 for main thread
@@ -102,6 +111,7 @@ where
             let handlers_ref = Arc::clone(&handlers);
             let dispatchers_ref = dispatchers.clone();
             let barrier_ref = Arc::clone(&startup_barrier);
+            let shutdown_ref = Arc::clone(&shutdown_signal);
 
             let handle = thread::spawn(move || {
                 if let Err(e) = pin_thread_to_core(core.raw()) {
@@ -116,6 +126,7 @@ where
                     &handlers_ref,
                     &dispatchers_ref,
                     batch_size,
+                    &shutdown_ref,
                 );
             });
 
@@ -128,6 +139,7 @@ where
         SharedWorkerHandle {
             handles,
             dispatchers: dispatchers.to_vec(),
+            shutdown_signal,
         }
     }
 
@@ -169,6 +181,7 @@ where
         handlers: &[Box<dyn Fn(T) + Send + Sync>],
         dispatchers: &[Arc<ChannelDispatcher<T>>],
         batch_size: usize,
+        shutdown_signal: &Arc<AtomicBool>,
     ) {
         let mut select = Select::new();
         for (_, receiver) in tagged_receivers.iter() {
@@ -176,6 +189,10 @@ where
         }
 
         loop {
+            if shutdown_signal.load(Ordering::Relaxed) {
+                break;
+            }
+
             let oper = select.select();
             let oper_index = oper.index();
             let (handler_index, receiver) = &tagged_receivers[oper_index];
@@ -208,7 +225,7 @@ where
             }
 
             if !batch.is_empty() {
-                Self::process_batch(batch, handler, dispatcher);
+                Self::process_batch(batch, handler.as_ref(), dispatcher);
             }
 
             if let Some(err) = recv_error {
@@ -259,28 +276,105 @@ where
     }
 
     /// Gracefully shuts down all worker threads.
-    /// Returns the final statistics snapshot
-    pub fn shutdown(mut self) -> Vec<SubscriptionStats> {
-        // Wait for active processing to complete
-        self.wait_for_completion();
-        let final_stats: Vec<SubscriptionStats> = self
-            .dispatchers
+    /// If `flush_dir` is provided, all channel contents are flushed to disk.
+    /// Otherwise, it waits for every item in the channels to be processed.
+    /// In the non-flush case, this may appear to stall, since the
+    /// function blocks until all pending work is completed. Returns
+    /// the final statistics snapshot.
+    pub fn shutdown(mut self, flush_dir: Option<&PathBuf>) -> Vec<SubscriptionStats>
+    where
+        T: Serialize,
+    {
+        if let Some(dir) = flush_dir {
+            self.flush_shutdown(dir);
+        } else {
+            self.complete_shutdown();
+        }
+
+        self.dispatchers
             .iter()
             .map(|dispatcher| dispatcher.stats().snapshot())
-            .collect();
+            .collect()
+    }
 
-        // Drop channels to break out of processing loops
+    fn complete_shutdown(&mut self) {
+        self.wait_for_completion();
+        self.shutdown_signal.store(true, Ordering::SeqCst);
+
         for dispatcher in &self.dispatchers {
             dispatcher.close_channels();
         }
 
-        // Wait for all worker threads to complete
+        for (i, handle) in self.handles.drain(..).enumerate() {
+            if let Err(e) = handle.join() {
+                eprintln!("Thread {i} error: {e:?}");
+            }
+        }
+    }
+
+    fn flush_shutdown(&mut self, flush_dir: &PathBuf)
+    where
+        T: Serialize,
+    {
+        self.shutdown_signal.store(true, Ordering::SeqCst);
+
+        for dispatcher in &self.dispatchers {
+            dispatcher.close_channels();
+        }
+
         for (i, handle) in self.handles.drain(..).enumerate() {
             if let Err(e) = handle.join() {
                 eprintln!("Thread {i} error: {e:?}");
             }
         }
 
-        final_stats
+        for (i, dispatcher) in self.dispatchers.iter().enumerate() {
+            let mut flushed_messages = Vec::new();
+
+            let receivers = dispatcher.receivers();
+            for receiver in receivers.iter() {
+                while let Ok(message) = receiver.try_recv() {
+                    flushed_messages.push(message);
+                }
+            }
+
+            let message_count = flushed_messages.len() as u64;
+            if message_count == 0 {
+                continue;
+            }
+
+            let file_path = flush_dir.join(format!("{}.json", dispatcher.name()));
+
+            if flush_messages(&flushed_messages, &file_path).is_ok() {
+                println!(
+                    "Dispatcher {}: flushed {} messages to {}",
+                    i,
+                    message_count,
+                    file_path.display()
+                );
+                dispatcher
+                    .stats()
+                    .flushed
+                    .fetch_add(message_count, Ordering::Relaxed);
+            } else {
+                eprintln!(
+                    "Dispatcher {}: error flushing, dropped {} messages",
+                    i, message_count
+                );
+                dispatcher
+                    .stats()
+                    .dropped
+                    .fetch_add(message_count, Ordering::Relaxed);
+            }
+        }
     }
+}
+
+/// Writes messages to disk as formatted JSON.
+fn flush_messages<T: Serialize>(messages: &[T], path: &PathBuf) -> Result<()> {
+    let mut file = File::create(path)?;
+    let json_str =
+        serde_json::to_string_pretty(messages).map_err(|e| Error::new(ErrorKind::Other, e))?;
+    writeln!(file, "{}", json_str)?;
+    Ok(())
 }

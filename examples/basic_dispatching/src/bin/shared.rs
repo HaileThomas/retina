@@ -3,6 +3,7 @@ use retina_core::multicore::{ChannelDispatcher, ChannelMode, SharedWorkerThreadS
 use retina_core::{config::load_config, CoreId, Runtime};
 use retina_datatypes::{ConnRecord, DnsTransaction, TlsHandshake};
 use retina_filtergen::{filter, retina_main};
+use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
@@ -46,6 +47,9 @@ struct Args {
     #[clap(long, value_enum, default_value = "per-core")]
     channel_mode: ChannelModeArg,
 
+    #[clap(long, value_name = "PATH", parse(from_os_str))]
+    flush_channels: Option<PathBuf>,
+
     #[clap(long, value_name = "BOOLEAN", action = SetTrue)]
     show_stats: bool,
 
@@ -53,7 +57,7 @@ struct Args {
     show_args: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 enum Event {
     Tls((TlsHandshake, ConnRecord)),
     Dns((DnsTransaction, ConnRecord)),
@@ -83,7 +87,7 @@ fn dns_cb(dns: &DnsTransaction, conn_record: &ConnRecord, rx_core: &CoreId) {
 fn main() {
     let args = Args::parse();
     if args.show_args {
-        println!("{:#?}\n", args);
+        println!("{args:#?}");
     }
 
     let config = load_config(&args.config);
@@ -97,11 +101,13 @@ fn main() {
     let tls_dispatcher = Arc::new(ChannelDispatcher::new(
         channel_mode.clone(),
         args.tls_channel_size,
+        "tls_dispatcher".to_string(),
     ));
 
     let dns_dispatcher = Arc::new(ChannelDispatcher::new(
         channel_mode.clone(),
         args.dns_channel_size,
+        "dns_dispatcher".to_string(),
     ));
 
     TLS_DISPATCHER
@@ -129,15 +135,17 @@ fn main() {
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();
     runtime.run();
 
-    let final_stats = worker_handle.shutdown();
+    let final_stats = worker_handle.shutdown(args.flush_channels.as_ref());
 
     if args.show_stats {
         if let Some(tls_stats) = final_stats.get(0) {
-            println!("=== TLS Stats ===\n{}\n", tls_stats);
+            println!("=== TLS Stats ===");
+            println!("{tls_stats}");
         }
 
         if let Some(dns_stats) = final_stats.get(1) {
-            println!("=== DNS Stats ===\n{}", dns_stats);
+            println!("=== DNS Stats ===");
+            println!("{dns_stats}");
         }
     }
 }

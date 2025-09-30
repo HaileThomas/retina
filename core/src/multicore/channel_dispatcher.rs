@@ -36,7 +36,7 @@ pub enum ChannelMode {
     PerCore(Vec<CoreId>),
 }
 
-type Channel<T> = (Option<Sender<T>>, Arc<Receiver<T>>); 
+type Channel<T> = (Option<Sender<T>>, Arc<Receiver<T>>);
 
 /// Internal representation of the channel configuration based on chosen operating mode.
 pub enum Channels<T> {
@@ -52,31 +52,33 @@ pub enum Channels<T> {
 ///
 /// * `T` - The type of subscriptions being dispatched. Must implement `Send + 'static`.
 pub struct ChannelDispatcher<T> {
+    name: String,
     channels: Mutex<Channels<T>>,
     stats: SubscriptionStats,
 }
 
 impl<T: Send + 'static> ChannelDispatcher<T> {
     /// Creates a new channel dispatcher with the specified mode and channel capacity.
-    pub fn new(mode: ChannelMode, channel_size: usize) -> Self {
+    pub fn new(mode: ChannelMode, channel_size: usize, name: String) -> Self {
         match mode {
-            ChannelMode::Shared => Self::new_shared(channel_size),
-            ChannelMode::PerCore(rx_cores) => Self::new_percore(&rx_cores, channel_size),
+            ChannelMode::Shared => Self::new_shared(channel_size, name),
+            ChannelMode::PerCore(rx_cores) => Self::new_percore(&rx_cores, channel_size, name),
         }
     }
 
     /// Creates a new shared-mode dispatcher.
-    fn new_shared(channel_size: usize) -> Self {
+    fn new_shared(channel_size: usize, name: String) -> Self {
         let (tx, rx) = bounded(channel_size);
 
         Self {
+            name: name,
             channels: Mutex::new(Channels::Shared((Some(tx), Arc::new(rx)))),
             stats: SubscriptionStats::new(),
         }
     }
 
     /// Creates a new per-core mode dispatcher.
-    fn new_percore(rx_cores: &[CoreId], channel_size: usize) -> Self {
+    fn new_percore(rx_cores: &[CoreId], channel_size: usize, name: String) -> Self {
         let mut map = HashMap::with_capacity(rx_cores.len());
 
         for &core in rx_cores {
@@ -85,6 +87,7 @@ impl<T: Send + 'static> ChannelDispatcher<T> {
         }
 
         Self {
+            name: name,
             channels: Mutex::new(Channels::PerCore(map)),
             stats: SubscriptionStats::new(),
         }
@@ -153,6 +156,11 @@ impl<T: Send + 'static> ChannelDispatcher<T> {
     /// Returns a reference to the dispatch statistics.
     pub fn stats(&self) -> &SubscriptionStats {
         &self.stats
+    }
+
+    /// Returns a reference to the name.
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 

@@ -23,6 +23,10 @@ pub struct SubscriptionStats {
     /// Number of messages currently being processed.
     /// Wrapped in `Arc` for thread sharing.
     pub actively_processing: Arc<AtomicU64>,
+
+    /// Number of messages saved to disk (not processed).
+    /// Wrapped in `Arc` for thread sharing.
+    pub flushed: Arc<AtomicU64>,
 }
 
 impl SubscriptionStats {
@@ -33,6 +37,7 @@ impl SubscriptionStats {
             dropped: AtomicU64::new(0),
             processed: Arc::new(AtomicU64::new(0)),
             actively_processing: Arc::new(AtomicU64::new(0)),
+            flushed: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -43,6 +48,7 @@ impl SubscriptionStats {
             dropped: AtomicU64::new(self.get_dropped()),
             processed: Arc::new(AtomicU64::new(self.get_processed())),
             actively_processing: Arc::new(AtomicU64::new(self.get_actively_processing())),
+            flushed: Arc::new(AtomicU64::new(self.get_flushed())),
         }
     }
 
@@ -65,6 +71,11 @@ impl SubscriptionStats {
     pub fn get_actively_processing(&self) -> u64 {
         self.actively_processing.load(Ordering::Relaxed)
     }
+
+    /// Returns the current number of messages flushed to disk.
+    pub fn get_flushed(&self) -> u64 {
+        self.flushed.load(Ordering::Relaxed)
+    }
 }
 
 /// Prints current statistics to stdout.
@@ -72,9 +83,10 @@ impl fmt::Display for SubscriptionStats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Processed: {}\nDropped: {}",
+            "Processed: {}\nDropped: {}\nFlushed (to disk): {}",
             self.get_processed(),
             self.get_dropped(),
+            self.get_flushed(),
         )
     }
 }
