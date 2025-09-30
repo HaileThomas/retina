@@ -372,6 +372,10 @@ where
 
 /// Writes messages to disk as formatted JSON.
 fn flush_messages<T: Serialize>(messages: &[T], path: &PathBuf) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
     let mut file = File::create(path)?;
     let json_str =
         serde_json::to_string_pretty(messages).map_err(|e| Error::new(ErrorKind::Other, e))?;

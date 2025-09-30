@@ -302,13 +302,9 @@ where
     where
         T: Serialize,
     {
-        // Signal all worker threads to stop processing immediately
         self.shutdown_signal.store(true, Ordering::Relaxed);
 
-        // Give threads a moment to exit their loops
         sleep(Duration::from_millis(50));
-
-        // Flush all remaining messages to specified `flush_dir`
         let mut flushed_messages = Vec::new();
 
         for receiver in self.dispatcher.receivers().iter() {
@@ -349,6 +345,10 @@ where
 
 /// Writes messages to disk as formatted JSON.
 fn flush_messages<T: Serialize>(messages: &[T], path: &PathBuf) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
     let mut file = File::create(path)?;
     let json_str =
         serde_json::to_string_pretty(messages).map_err(|e| Error::new(ErrorKind::Other, e))?;
