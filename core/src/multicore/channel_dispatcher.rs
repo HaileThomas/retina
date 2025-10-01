@@ -71,7 +71,7 @@ impl<T: Send + 'static> ChannelDispatcher<T> {
         let (tx, rx) = bounded(channel_size);
 
         Self {
-            name: name,
+            name,
             channels: Mutex::new(Channels::Shared((Some(tx), Arc::new(rx)))),
             stats: SubscriptionStats::new(),
         }
@@ -87,7 +87,7 @@ impl<T: Send + 'static> ChannelDispatcher<T> {
         }
 
         Self {
-            name: name,
+            name,
             channels: Mutex::new(Channels::PerCore(map)),
             stats: SubscriptionStats::new(),
         }

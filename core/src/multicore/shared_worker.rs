@@ -3,8 +3,8 @@ use crate::CoreId;
 use crossbeam::channel::{Receiver, Select, TryRecvError};
 use serde::Serialize;
 use std::fs::File;
-use std::io::{Error, ErrorKind, Result, Write};
-use std::path::PathBuf;
+use std::io::{Error, Result, Write};
+use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Barrier,
@@ -312,7 +312,7 @@ where
         }
     }
 
-    fn flush_shutdown(&mut self, flush_dir: &PathBuf)
+    fn flush_shutdown(&mut self, flush_dir: &Path)
     where
         T: Serialize,
     {
@@ -347,9 +347,7 @@ where
 
             if flush_messages(&flushed_messages, &file_path).is_ok() {
                 println!(
-                    "Dispatcher {}: flushed {} messages to {}",
-                    i,
-                    message_count,
+                    "Dispatcher {i}: flushed {message_count} messages to {}",
                     file_path.display()
                 );
                 dispatcher
@@ -357,10 +355,7 @@ where
                     .flushed
                     .fetch_add(message_count, Ordering::Relaxed);
             } else {
-                eprintln!(
-                    "Dispatcher {}: error flushing, dropped {} messages",
-                    i, message_count
-                );
+                eprintln!("Dispatcher {i}: error flushing, dropped {message_count} messages");
                 dispatcher
                     .stats()
                     .dropped
@@ -377,8 +372,7 @@ fn flush_messages<T: Serialize>(messages: &[T], path: &PathBuf) -> Result<()> {
     }
 
     let mut file = File::create(path)?;
-    let json_str =
-        serde_json::to_string_pretty(messages).map_err(|e| Error::new(ErrorKind::Other, e))?;
-    writeln!(file, "{}", json_str)?;
+    let json_str = serde_json::to_string_pretty(messages).map_err(Error::other)?;
+    writeln!(file, "{json_str}")?;
     Ok(())
 }
