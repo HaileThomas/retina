@@ -9,7 +9,19 @@ Both examples process the same network events but use different thread managemen
 
 ## Performance
 
+### Baseline Performance
 With the default configuration provided, testing on Stanford University network achieved **zero subscription loss** running at **135Gbps of traffic for 3 minutes**.
+
+### Work Dispatching vs. Basic Callback
+Testing with computationally intensive workloads (10 million cycles per callback) demonstrates the advantage of work dispatching for CPU-bound processing:
+
+**Configuration** (8 total cores)  
+- **Work dispatching**: 4 RX cores + 4 processing cores  
+- **Basic callback**: All 8 RX cores (no separate processing)  
+
+**Results** (5-minute test, 105 Gbps average traffic, 90–120 Gbps range)  
+- **Work dispatching**: &lt;1% packet loss, **0% subscription loss**  
+- **Basic callback**: 5–15% packet loss (9.78% average)  
 
 ## Configuration
 
@@ -27,6 +39,9 @@ The worker threads and message passing setup are designed to be configurable bas
 | `--tls-channel-size` | 32768 | Channel buffer size for TLS events |
 | `--dns-channel-size` | 32768 | Channel buffer size for DNS events |
 | `--channel-mode` | per-core | Are channels sharded by RX core? |
+| `--flush-channels` | None | If provided, directory to flush content of channels at the end of the program.  |
+| `--show-stats` | false | Display performance statistics |
+| `--show-args` | false | Display command-line arguments |
 
 ### Shared Worker Configuration
 
@@ -38,6 +53,9 @@ The worker threads and message passing setup are designed to be configurable bas
 | `--tls-channel-size` | 32768 | Channel buffer size for TLS events |
 | `--dns-channel-size` | 32768 | Channel buffer size for DNS events |
 | `--channel-mode` | per-core | Are channels sharded by RX core? |
+| `--flush-channels` | None | If provided, directory to flush content of channels at the end of the program. |
+| `--show-stats` | false | Display performance statistics |
+| `--show-args` | false | Display command-line arguments |
 
 ## Memory Considerations
 
