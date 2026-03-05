@@ -17,26 +17,27 @@ const CSV_HEADER: &str =
      total_pkts,total_pkt_bytes,total_payload_bytes,\
      orig_pkts,orig_pkt_bytes,orig_payload_bytes,orig_content_gaps,orig_missed_bytes,\
      resp_pkts,resp_pkt_bytes,resp_payload_bytes,resp_content_gaps,resp_missed_bytes,\
-     duration_ms,max_inactivity_ms\n";
+     duration_ms,max_inactivity_ms,time_to_second_pkt_ms\n";
 
 pub struct FlowFeatures {
-    pub dst_port:            u16,
-    pub protocol:            usize,
-    pub total_pkts:          u64,
-    pub total_pkt_bytes:     u64,
-    pub total_payload_bytes: u64,
-    pub orig_pkts:           u64,
-    pub orig_pkt_bytes:      u64,
-    pub orig_payload_bytes:  u64,
-    pub orig_content_gaps:   u64,
-    pub orig_missed_bytes:   u64,
-    pub resp_pkts:           u64,
-    pub resp_pkt_bytes:      u64,
-    pub resp_payload_bytes:  u64,
-    pub resp_content_gaps:   u64,
-    pub resp_missed_bytes:   u64,
-    pub duration_ms:         u128,
-    pub max_inactivity_ms:   u128,
+    pub dst_port:                u16,
+    pub protocol:                usize,
+    pub total_pkts:              u64,
+    pub total_pkt_bytes:         u64,
+    pub total_payload_bytes:     u64,
+    pub orig_pkts:               u64,
+    pub orig_pkt_bytes:          u64,
+    pub orig_payload_bytes:      u64,
+    pub orig_content_gaps:       u64,
+    pub orig_missed_bytes:       u64,
+    pub resp_pkts:               u64,
+    pub resp_pkt_bytes:          u64,
+    pub resp_payload_bytes:      u64,
+    pub resp_content_gaps:       u64,
+    pub resp_missed_bytes:       u64,
+    pub duration_ms:             u128,
+    pub max_inactivity_ms:       u128,
+    pub time_to_second_pkt_ms:   u128,
 }
 
 fn extract_features(conn: &ConnRecord, n_packets: usize) -> Option<FlowFeatures> {
@@ -45,29 +46,30 @@ fn extract_features(conn: &ConnRecord, n_packets: usize) -> Option<FlowFeatures>
     }
 
     Some(FlowFeatures {
-        dst_port:            conn.five_tuple.resp.port(),
-        protocol:            conn.five_tuple.proto,
-        total_pkts:          conn.total_pkts(),
-        total_pkt_bytes:     conn.total_pkt_bytes(),
-        total_payload_bytes: conn.total_payload_bytes(),
-        orig_pkts:           conn.orig.nb_pkts,
-        orig_pkt_bytes:      conn.orig.nb_pkt_bytes,
-        orig_payload_bytes:  conn.orig.nb_payload_bytes,
-        orig_content_gaps:   conn.orig.content_gaps(),
-        orig_missed_bytes:   conn.orig.missed_bytes(),
-        resp_pkts:           conn.resp.nb_pkts,
-        resp_pkt_bytes:      conn.resp.nb_pkt_bytes,
-        resp_payload_bytes:  conn.resp.nb_payload_bytes,
-        resp_content_gaps:   conn.resp.content_gaps(),
-        resp_missed_bytes:   conn.resp.missed_bytes(),
-        duration_ms:         conn.duration().as_millis(),
-        max_inactivity_ms:   conn.max_inactivity.as_millis(),
+        dst_port:              conn.five_tuple.resp.port(),
+        protocol:              conn.five_tuple.proto,
+        total_pkts:            conn.total_pkts(),
+        total_pkt_bytes:       conn.total_pkt_bytes(),
+        total_payload_bytes:   conn.total_payload_bytes(),
+        orig_pkts:             conn.orig.nb_pkts,
+        orig_pkt_bytes:        conn.orig.nb_pkt_bytes,
+        orig_payload_bytes:    conn.orig.nb_payload_bytes,
+        orig_content_gaps:     conn.orig.content_gaps(),
+        orig_missed_bytes:     conn.orig.missed_bytes(),
+        resp_pkts:             conn.resp.nb_pkts,
+        resp_pkt_bytes:        conn.resp.nb_pkt_bytes,
+        resp_payload_bytes:    conn.resp.nb_payload_bytes,
+        resp_content_gaps:     conn.resp.content_gaps(),
+        resp_missed_bytes:     conn.resp.missed_bytes(),
+        duration_ms:           conn.duration().as_millis(),
+        max_inactivity_ms:     conn.max_inactivity.as_millis(),
+        time_to_second_pkt_ms: conn.time_to_second_packet().as_millis(),
     })
 }
 
 fn serialize_csv_row(f: &FlowFeatures) -> String {
     format!(
-        "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+        "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
         f.dst_port,
         f.protocol,
         f.total_pkts,
@@ -85,6 +87,7 @@ fn serialize_csv_row(f: &FlowFeatures) -> String {
         f.resp_missed_bytes,
         f.duration_ms,
         f.max_inactivity_ms,
+        f.time_to_second_pkt_ms,
     )
 }
 
