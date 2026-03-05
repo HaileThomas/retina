@@ -1,7 +1,7 @@
 use array_init::array_init;
 use retina_core::{config::load_config, CoreId, Runtime};
 use retina_datatypes::*;
-use retina_filtergen::{filter, retina_main, streaming};
+use retina_filtergen::{filter, retina_main};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::sync::OnceLock;
@@ -9,7 +9,6 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 
 const NUM_CORES: usize = 16;
 const ARR_LEN: usize = NUM_CORES + 1;
-const N_PACKETS: usize = 10;
 const OUTFILE_PREFIX: &str = "flow_features_";
 const OUTFILE: &str = "flow_features.csv";
 const CSV_HEADER: &str =
@@ -17,7 +16,8 @@ const CSV_HEADER: &str =
      total_pkts,total_pkt_bytes,total_payload_bytes,\
      orig_pkts,orig_pkt_bytes,orig_payload_bytes,orig_content_gaps,orig_missed_bytes,\
      resp_pkts,resp_pkt_bytes,resp_payload_bytes,resp_content_gaps,resp_missed_bytes,\
-     duration_ms,max_inactivity_ms,time_to_second_pkt_ms\n";
+     duration_ms,max_inactivity_ms,time_to_second_pkt_ms,\
+     final_total_payload_bytes\n";
 
 pub struct FlowFeatures {
     pub src_ip:                  std::net::IpAddr,
@@ -41,41 +41,42 @@ pub struct FlowFeatures {
     pub duration_ms:             u128,
     pub max_inactivity_ms:       u128,
     pub time_to_second_pkt_ms:   u128,
+    pub final_total_payload_bytes: u64,
 }
 
-fn extract_features(conn: &ConnRecord, n_packets: usize) -> Option<FlowFeatures> {
-    if conn.total_pkts() < n_packets as u64 {
-        return None;
-    }
+fn extract_features(conn: &ConnRecord) -> Option<FlowFeatures> {
+    let prefix_orig = conn.prefix_orig.as_ref()?;
+    let prefix_resp = conn.prefix_resp.as_ref()?;
 
     Some(FlowFeatures {
-        src_ip:                conn.five_tuple.orig.ip(),
-        dst_ip:                conn.five_tuple.resp.ip(),
-        src_port:              conn.five_tuple.orig.port(),
-        dst_port:              conn.five_tuple.resp.port(),
-        protocol:              conn.five_tuple.proto,
-        total_pkts:            conn.total_pkts(),
-        total_pkt_bytes:       conn.total_pkt_bytes(),
-        total_payload_bytes:   conn.total_payload_bytes(),
-        orig_pkts:             conn.orig.nb_pkts,
-        orig_pkt_bytes:        conn.orig.nb_pkt_bytes,
-        orig_payload_bytes:    conn.orig.nb_payload_bytes,
-        orig_content_gaps:     conn.orig.content_gaps(),
-        orig_missed_bytes:     conn.orig.missed_bytes(),
-        resp_pkts:             conn.resp.nb_pkts,
-        resp_pkt_bytes:        conn.resp.nb_pkt_bytes,
-        resp_payload_bytes:    conn.resp.nb_payload_bytes,
-        resp_content_gaps:     conn.resp.content_gaps(),
-        resp_missed_bytes:     conn.resp.missed_bytes(),
-        duration_ms:           conn.duration().as_millis(),
-        max_inactivity_ms:     conn.max_inactivity.as_millis(),
-        time_to_second_pkt_ms: conn.time_to_second_packet().as_millis(),
+        src_ip:                    conn.five_tuple.orig.ip(),
+        dst_ip:                    conn.five_tuple.resp.ip(),
+        src_port:                  conn.five_tuple.orig.port(),
+        dst_port:                  conn.five_tuple.resp.port(),
+        protocol:                  conn.five_tuple.proto,
+        total_pkts:                prefix_orig.nb_pkts + prefix_resp.nb_pkts,
+        total_pkt_bytes:           prefix_orig.nb_pkt_bytes + prefix_resp.nb_pkt_bytes,
+        total_payload_bytes:       prefix_orig.nb_payload_bytes + prefix_resp.nb_payload_bytes,
+        orig_pkts:                 prefix_orig.nb_pkts,
+        orig_pkt_bytes:            prefix_orig.nb_pkt_bytes,
+        orig_payload_bytes:        prefix_orig.nb_payload_bytes,
+        orig_content_gaps:         prefix_orig.content_gaps(),
+        orig_missed_bytes:         prefix_orig.missed_bytes(),
+        resp_pkts:                 prefix_resp.nb_pkts,
+        resp_pkt_bytes:            prefix_resp.nb_pkt_bytes,
+        resp_payload_bytes:        prefix_resp.nb_payload_bytes,
+        resp_content_gaps:         prefix_resp.content_gaps(),
+        resp_missed_bytes:         prefix_resp.missed_bytes(),
+        duration_ms:               conn.prefix_duration.unwrap().as_millis(),
+        max_inactivity_ms:         conn.prefix_max_inactivity.unwrap().as_millis(),
+        time_to_second_pkt_ms:     conn.prefix_time_to_second_pkt.unwrap().as_millis(),
+        final_total_payload_bytes: conn.orig.nb_payload_bytes + conn.resp.nb_payload_bytes,
     })
 }
 
 fn serialize_csv_row(f: &FlowFeatures) -> String {
     format!(
-        "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+        "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
         f.src_ip,
         f.dst_ip,
         f.src_port,
@@ -97,6 +98,7 @@ fn serialize_csv_row(f: &FlowFeatures) -> String {
         f.duration_ms,
         f.max_inactivity_ms,
         f.time_to_second_pkt_ms,
+        f.final_total_payload_bytes,
     )
 }
 
@@ -141,20 +143,17 @@ fn combine_results() {
     println!("Written to {}", OUTFILE);
 }
 
-#[filter("tcp")]
-#[streaming("packets=1")]
-fn flow_cb(conn: &ConnRecord, core_id: &CoreId) -> bool {
-    if let Some(features) = extract_features(conn, N_PACKETS) {
+#[filter("tcp or udp")]
+fn flow_cb(conn: &ConnRecord, core_id: &CoreId) {
+    if let Some(features) = extract_features(conn) {
         write_row(&serialize_csv_row(&features), core_id);
-        return false;
     }
-    true
 }
 
 #[retina_main(1)]
 fn main() {
     let _ = results();
-    
+
     let config = load_config("./configs/online.toml");
     let mut runtime: Runtime<SubscribedWrapper> = Runtime::new(config, filter).unwrap();
     runtime.run();
