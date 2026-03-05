@@ -13,13 +13,16 @@ const N_PACKETS: usize = 10;
 const OUTFILE_PREFIX: &str = "flow_features_";
 const OUTFILE: &str = "flow_features.csv";
 const CSV_HEADER: &str =
-    "dst_port,protocol,\
+    "src_ip,dst_ip,src_port,dst_port,protocol,\
      total_pkts,total_pkt_bytes,total_payload_bytes,\
      orig_pkts,orig_pkt_bytes,orig_payload_bytes,orig_content_gaps,orig_missed_bytes,\
      resp_pkts,resp_pkt_bytes,resp_payload_bytes,resp_content_gaps,resp_missed_bytes,\
      duration_ms,max_inactivity_ms,time_to_second_pkt_ms\n";
 
 pub struct FlowFeatures {
+    pub src_ip:                  std::net::IpAddr,
+    pub dst_ip:                  std::net::IpAddr,
+    pub src_port:                u16,
     pub dst_port:                u16,
     pub protocol:                usize,
     pub total_pkts:              u64,
@@ -46,6 +49,9 @@ fn extract_features(conn: &ConnRecord, n_packets: usize) -> Option<FlowFeatures>
     }
 
     Some(FlowFeatures {
+        src_ip:                conn.five_tuple.orig.ip(),
+        dst_ip:                conn.five_tuple.resp.ip(),
+        src_port:              conn.five_tuple.orig.port(),
         dst_port:              conn.five_tuple.resp.port(),
         protocol:              conn.five_tuple.proto,
         total_pkts:            conn.total_pkts(),
@@ -69,7 +75,10 @@ fn extract_features(conn: &ConnRecord, n_packets: usize) -> Option<FlowFeatures>
 
 fn serialize_csv_row(f: &FlowFeatures) -> String {
     format!(
-        "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+        "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+        f.src_ip,
+        f.dst_ip,
+        f.src_port,
         f.dst_port,
         f.protocol,
         f.total_pkts,
