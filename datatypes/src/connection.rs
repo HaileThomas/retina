@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::net::SocketAddr;
 
-const N_PACKETS: usize = 7;
+pub const N_PACKETS: usize = 7;
 
 /// Pure SYN
 pub(crate) const HIST_SYN: u8 = b'S';
