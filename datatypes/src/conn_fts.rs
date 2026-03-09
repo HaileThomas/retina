@@ -170,7 +170,7 @@ impl Tracked for InterArrivals {
                 if self.pkt_count_ctos > 1 {
                     self.interarrivals_ctos.push(now - self.last_pkt_ctos);
                 }
-                self.last_pkt_stoc = now;
+                self.last_pkt_ctos = now;
             } else {
                 self.pkt_count_stoc += 1;
                 if self.pkt_count_stoc > 1 {

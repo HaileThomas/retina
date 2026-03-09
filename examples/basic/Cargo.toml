@@ -13,3 +13,6 @@ serde = { version = "1.0", features = ["derive"] }
 regex = "1.7.3"
 array-init = "2.1"
 csv = "1"
+dns-parser="0.8"
+serde_json = "1"
+const_format = "0.2"

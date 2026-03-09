@@ -21,10 +21,17 @@ use crate::protocols::stream::{
 
 use tls_parser::*;
 
+pub const N_PACKETS: u64 = 7;
+
 /// Parses a single TLS handshake per connection.
 #[derive(Debug)]
 pub struct TlsParser {
     sessions: Vec<Tls>,
+    pkt_count: u64,
+    /// Set to true once pkt_count reaches N_PACKETS.
+    /// After this point we stop updating client_hello/server_hello so the
+    /// values are frozen at the early-flow snapshot.
+    pub snapshotted: bool,
 }
 
 impl TlsParser {}
@@ -33,6 +40,8 @@ impl Default for TlsParser {
     fn default() -> Self {
         TlsParser {
             sessions: vec![Tls::new()],
+            pkt_count: 0,
+            snapshotted: false,
         }
     }
 }
@@ -46,12 +55,24 @@ impl ConnParsable for TlsParser {
             return ParseResult::Skipped;
         }
 
-        if let Ok(data) = (pdu.mbuf_ref()).get_data_slice(offset, length) {
+        // Stop parsing TLS messages once we've passed the snapshot window.
+        if self.snapshotted {
+            return ParseResult::Continue(0);
+        }
+
+        let result = if let Ok(data) = (pdu.mbuf_ref()).get_data_slice(offset, length) {
             self.sessions[0].parse_tcp_level(data, pdu.dir)
         } else {
             log::warn!("Malformed packet");
             ParseResult::Skipped
+        };
+
+        self.pkt_count += 1;
+        if self.pkt_count >= N_PACKETS {
+            self.snapshotted = true;
         }
+
+        result
     }
 
     fn probe(&self, pdu: &L4Pdu) -> ProbeResult {
