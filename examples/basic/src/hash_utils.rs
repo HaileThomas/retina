@@ -1,12 +1,22 @@
 use std::net::IpAddr;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 
 const HASH_SALT: u64 = 0x9e3779b97f4a7c15;
 
 pub fn hash_ip(ip: IpAddr) -> u64 {
-    let mut h = DefaultHasher::new();
-    HASH_SALT.hash(&mut h);
-    ip.hash(&mut h);
-    h.finish()
+    match ip {
+        IpAddr::V4(v4) => hash_u32(u32::from(v4)),
+        IpAddr::V6(v6) => hash_u128(u128::from(v6)),
+    }
+}
+
+#[inline]
+fn hash_u32(n: u32) -> u64 {
+    (n as u64 ^ HASH_SALT).wrapping_mul(HASH_SALT)
+}
+
+#[inline]
+fn hash_u128(n: u128) -> u64 {
+    let lo = n as u64;
+    let hi = (n >> 64) as u64;
+    (lo ^ hi ^ HASH_SALT).wrapping_mul(HASH_SALT)
 }

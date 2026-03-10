@@ -1,7 +1,8 @@
 use const_format::concatcp;
 
 pub const CONN_HEADER: &str =
-    "src_ip_subn,dst_ip_subn,src_port,dst_port,protocol,\
+    "src_ip_hash,dst_ip_hash,\
+     src_ip_subn,dst_ip_subn,src_port,dst_port,protocol,\
      duration_ms,max_inactivity_ms,time_to_second_pkt_ms,\
      hist_syn,hist_synack,hist_ack,hist_data,hist_fin,hist_rst,\
      hist_syn_r,hist_synack_r,hist_ack_r,hist_data_r,hist_fin_r,hist_rst_r,\
@@ -28,8 +29,7 @@ pub const DNS_HEADER: &str =
      additional_num_a,additional_num_aaaa,additional_num_other";
 
 pub const TLS_HEADER: &str =
-    "client_ip_hash,server_ip_hash,\
-     has_client_hello,client_version,\
+    "has_client_hello,client_version,\
      client_num_supported_groups,client_num_sig_algs,client_num_alpn_protocols,\
      client_num_key_shares,client_num_supported_vers,\
      client_has_sni,client_sni_len,client_has_session_id,client_session_id_len,\
