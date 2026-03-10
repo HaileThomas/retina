@@ -21,7 +21,7 @@ use crate::protocols::stream::{
 
 use tls_parser::*;
 
-pub const N_PACKETS: u64 = 7;
+pub const N_PACKETS: u64 = 20;
 
 /// Parses a single TLS handshake per connection.
 #[derive(Debug)]
