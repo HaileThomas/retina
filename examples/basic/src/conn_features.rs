@@ -2,6 +2,7 @@ use retina_datatypes::{ConnRecord, connection::N_PACKETS};
 use retina_datatypes::connection::{HIST_SYN, HIST_SYNACK, HIST_ACK, HIST_DATA, HIST_FIN, HIST_RST};
 use retina_datatypes::conn_fts::InterArrivals;
 use serde::Serialize;
+use std::time::SystemTime;
 use crate::hash_utils::hash_ip;
 
 fn ip_to_prefix(ip: &std::net::IpAddr) -> u128 {
@@ -51,6 +52,7 @@ fn iat_stats(iats_us: &[u128]) -> (f64, f64, u128, u128, f64) {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ConnFeatures {
+    pub first_seen_ts: u64,              // Timestamp
     pub src_ip_hash: u64,                // hash of source IP address
     pub dst_ip_hash: u64,                // hash of destination IP address
     pub src_ip_subn: u128,               // source IP address, masked to /24 (IPv4) or /48 (IPv6)
@@ -133,6 +135,10 @@ impl ConnFeatures {
         let (resp_iat_mean, resp_iat_median, resp_iat_min, resp_iat_max, resp_iat_std) = iat_stats(&resp_iats_us);
 
         Some(Self {
+            first_seen_ts: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_micros() as u64,
             src_ip_hash: hash_ip(conn.five_tuple.orig.ip()),
             dst_ip_hash: hash_ip(conn.five_tuple.resp.ip()),
             src_ip_subn: ip_to_prefix(&conn.five_tuple.orig.ip()),
